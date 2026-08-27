@@ -1,11 +1,7 @@
 # Shuffle Features 
-Describes the features included with Shuffle.
 
-* SaaS: [Shuffle Cloud](https://shuffler.io/pricing)
-* Open Source: [Shuffle onprem](https://github.com/frikky/shuffle)
-* Hybrid: [Shuffle Hybrid](/docs/configuration#hybrid_configuration)
+[![Shuffle Features Presentation PDF](https://raw.githubusercontent.com/Shuffle/Shuffle-docs/master/assets/Shuffle%20Features%20Presentation.png)](https://raw.githubusercontent.com/Shuffle/Shuffle-docs/master/assets/Shuffle%20Features%20Presentation.pdf)
 
-[Contact us](https://shuffler.io/contact) for more info
 
 ## Table of contents
 * [Introduction](#introduction)
@@ -19,6 +15,7 @@ Describes the features included with Shuffle.
 * [Encrypted Authentication Storage](#encrypted-authentication-storage)
 * [Built-in Documentation](#built-in-documentation)
 * [Automation Triggers](#triggers-of-all-kinds)
+* [Autocomplete](#autocomplete)
 * [SSO and MFA](#sso-and-mfa)
 * [Marketplace](#marketplace)
 * [Development AI](#development-ai)
@@ -29,14 +26,26 @@ With the problems described in [our about page](/docs/about) in mind, this docum
 ## Best in class App Creator
 Our app creator is how we can promise to build apps within hours and days, rather than weeks. It's a easy to use, but yet powerful way to easily interact with other platforms' API's. It allows for app creation based on Swagger/OpenAPI, and can handle authentication for any HTTP method. The best part? You can export those apps as OpenAPI, meaning our apps aren't tied to Shuffle itself. 
 
+You can now generate an app directly from documentation. Simply paste a URL to an API documentation page, and our system will automatically transform it into a working app for you.
+
+How it works:
+
+- Provide a documentation URL containing APIs.
+- Our system analyzes the structure and endpoints.
+- An app is generated automatically, ready to use and customize.
+
+And the best part?
+All apps can still be exported as OpenAPI specifications, meaning they are never locked into Shuffle.
+
 Our goal with the App Creator is to incentives as many security companies as possible to share their API's, and to keep the largest repository of integrations out there.
 
-![app creator](https://github.com/frikky/Shuffle/raw/master/frontend/src/assets/img/github_shuffle_img.png)
+![app creator](https://github.com/user-attachments/assets/71af788f-2a27-4c0c-945d-f8d1c7dd1318)
 
 ## The workflow designer 
 Our workflow designer is the part of Shuffle that makes it all fit together. Together with the [App creator](/apps/new) and our default apps (HTTP & Shuffle Toolbox), it gives you access to unlimited automation possibilities, ensuring anyone can learn to automate anything with just a few hours of practice.
 
 ![Automation-builder](https://github.com/frikky/shuffle-docs/blob/master/assets/shuffle-workflow-1.png?raw=true)
+
 
 ## Standard workflows and apps
 Shuffle comes pre-packaged with a [large amount of apps](https://github.com/frikky/shuffle-apps) and [workflows](https://github.com/frikky/shuffle-workflows), making it both easy to start using and extend. This, together with our [Marketplace](#marketplace) is what will bring security to new heights.
@@ -48,12 +57,12 @@ Shuffle's focus has and will always be on Open Source and collaboration. With th
 - [The local and hosted](https://github.com/frikky/shuffle) version of Shuffle is the one hosted on Github, and comes out of the box with no limitations.
 - [Shuffle Hybrid](#hybrid_configuration) is another variant, allow for the local and cloud version to work together. This will further allow for connections between Shuffle instances in the future.
 
-![Cloud organizations](https://github.com/frikky/shuffle-docs/blob/master/assets/features-3.png?raw=true)
+![Cloud organizations](https://github.com/user-attachments/assets/0c6c0b5d-953a-4461-8470-bf8bddd04c72)
 
 ## Multi-tenancy and Multi-org
 Shuffle allows for a user to have multiple Organizations associated with a User and vice versa. Organizations have logical barriers, making users able to easily swap between them. Shuffle is further extended for MSSP's needs, allowing for Sub-organizations to be controlled from a Parent-organization.
 
-![Shuffle Organization change](https://github.com/frikky/shuffle-docs/blob/master/assets/features-4.png?raw=true)
+![Shuffle Organization change](https://github.com/user-attachments/assets/250b58e7-4a1d-4f8f-b517-2d02cc2fbb64)
 
 ## Multiple environments
 Have multiple datacenters with physical barriers for connections? No problem - we've built a way for a single workflow to run scripts in multiple locations. Environments are divided by Organization, but still allowing for resource sharing if necessary.
@@ -63,7 +72,8 @@ What is a security system that can't handle files? Not very useful. The good new
 
 What more? We also support namespaces, allowing for the download of a full namespace as a single bundle. What does this mean? You can e.g. control all your rules from a single place. 
 
-![Shuffle file handling](https://github.com/frikky/shuffle-docs/blob/master/assets/features-5.png?raw=true)
+![Shuffle file handling](https://github.com/user-attachments/assets/b0fb44fb-ab50-42b4-b380-54be9a4a35f2)
+
 
 ## Key Value store
 We've extended Shuffle with the possibility of storing data for all your needs. This is called the "Shuffle Cache" and can be used for e.g. Pagination, timestamp management, IOC lists and anything else you want. Not to worry! This is permanent storage if you want it.
@@ -91,6 +101,16 @@ Automation wouldn't be automation if you had to do manual work. That's why Shuff
 
 Extension triggers (not exhaustive): AWS Lambda, AWS S3, Elastalert, Kafka, Pub/Sub
 
+## Autocomplete
+The Autocomplete feature in the Workflow Editor allows you to dynamically reference and insert data from previous node executions into your current action or script.
+
+When you open a field (such as the body, arguments, or parameters) and type the $ symbol or click the autocomplete icon, Shuffle automatically lists all available runtime variables and datastore entries from earlier workflow steps.
+
+Each listed item represents data output from a previous node (for example, $phishing.value, $email_ids.value, or $testing.value). By selecting any of these variables, it automatically inserts the appropriate dynamic reference into your editor.
+
+<img width="636" height="264" alt="Screenshot 2025-11-05 at 2 35 47 AM" src="https://github.com/user-attachments/assets/061fcbe8-1c7f-4f8a-9e49-7ab4380bd94a" />
+
+
 ## SSO and MFA
 SSO and other required authentication mechanisms are already in play, and available to anyone who wants to use them rather than normal signin. Our main supported platforms are the following, with more platforms to come ([ask us!](https://shuffler.io/contact)):
 - Okta
@@ -108,7 +128,7 @@ SSO and other required authentication mechanisms are already in play, and availa
 ### Marketplace
 The Shuffle marketplace is where you can go and find the integrations and workflows you want. As more users Publish their workflows and apps, we will move a lot of our focus here.
 
-![Shuffle marketplace](https://github.com/frikky/shuffle-docs/blob/master/assets/features-9.png?raw=true)
+![Shuffle marketplace](https://github.com/user-attachments/assets/aeb6612d-7b59-4c10-917f-214ca7840fed)
 
 ### Development AI  
 We're developing technology to allow for apps and workflows to be built based on text. This is based on OpenAPI's GPT-3 model, and can make it even easier for anyone to automate long-term. 

@@ -13,11 +13,15 @@ Documentation for troubleshooting and debugging known issues in Shuffle.
 * [Opensearch permission errors](#opensearch_permissions_error)
 * [Recover admin user](#recover-admin-user)
 * [Delete user](#delete_user)
+* [Docker client version too new](#docker_client_version)
 * [Useful OpenSearch Queries](#useful_opensearch_queries)
+* [OpenSearch Dashboards](#opensearch-dashboards)
 * [Extract all workflows](#extract_all_workflows)
+* [Moving from Docker in a VM to Kubernetes or SaaS](#moving_from_docker_in_a_vm_to_kubernetes_or_saas)
 * [Rebuilding an OpenSearch index](#rebuilding_an_opsearch_index)
 * [Updates Failing](#updates_failing)
 * [Database not starting](#database_not_starting)
+* [OpenSearch TLS certificate setup reference](#opensearch_tls_certificate_setup_reference)
 * [TLS timeout error/Timeout Errors/EOF Errors](#TLS_timeout_error/Timeout_Errors/EOF_Errors)
 * [Shuffle on ARM](#shuffle_on_arm)
 * [Orborus can't connect to backend](#orborus_backend_connection_problems)
@@ -27,6 +31,7 @@ Documentation for troubleshooting and debugging known issues in Shuffle.
 * [How to handle wrong or bad images on old versions of docker](#how-to-handle-wrong-or-bad-images-on-old-versions-of-docker)
 * [Docker not working](#docker_not_working)
 * [Troubleshooting for executions not running in swarm mode](#Troubleshooting_for_executions_not_running_in_swarm_mode)
+* [Swarm init advertise address error (manual fix)](#swarm_init_advertise_address_error_manual_fix)
 * [Find app creator Python function](#find_code_openapi_app)
 * [Tenants/Suborgs seem to be lost](#reinstate_lost_tenants)
 * [Find top index items opensearch](#find-top-index-items-opensearch)
@@ -261,6 +266,12 @@ sudo chown 1000:1000 -R shuffle-database
     curl -X DELETE "https://localhost:9200/users/_doc/<user_id>?pretty" -H 'Content-Type: application/json' --insecure -u <opensearch_user>:<opensearch_password>
     ```
 
+## Docker client version too new
+If we run into "Failed to build: Error in Docker build: Error response from daemon: client version 1.51 is too new. Maximum supported APl version is 1.43" add the following environment variable into docker-compose under the backend section.
+
+```- DOCKER_API_VERSION=1.40```
+
+
 ## Recover admin user
 If you find yourself in a situation where you have forgotten your passowrd and need a reset for your user, you can reset your lost password in your local instance by doing the following: 
 1. docker exec to get bash session into OpenSearch container `docker exec -it <container_id> bash`
@@ -320,6 +331,72 @@ Find all org IDs
 curl -X GET "https://localhost:9200/organizations/_search?pretty"  -u <opensearch_user>:<opensearch_password> --insecure -H 'Content-Type: application/json' -d' { "size": 10000, "query": { "match_all": {}}}' | grep "\"id\" : \"" | sed 's/ *$//g' | sed 's/^[ \t]*//;s/[ \t]*$//' | uniq -u
 ```
 
+## OpenSearch Dashboards
+
+If you prefer a visual interface over curl commands, you can add [OpenSearch Dashboards](https://opensearch.org/docs/latest/dashboards/) to your on-prem Shuffle deployment. This gives you a UI to browse indexes, run queries, inspect documents, and monitor index health.
+
+### Adding to docker-compose.yml
+
+Add this service to your existing `docker-compose.yml`, inside the `services:` block:
+
+```yaml
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:3.2.0
+    container_name: opensearch-dashboards
+    hostname: opensearch-dashboards
+    ports:
+      - 5601:5601
+    environment:
+      - OPENSEARCH_HOSTS=https://shuffle-opensearch:9200
+    networks:
+      - shuffle
+    depends_on:
+      - opensearch
+    restart: unless-stopped
+```
+
+Then start it:
+```bash
+docker-compose up -d opensearch-dashboards
+```
+
+The Dashboards version must match your OpenSearch major version. Check yours with:
+```bash
+curl -sk -u admin:<password> https://localhost:9200/ | grep number
+```
+
+### Accessing the Dashboard
+
+Open `http://<your-server-ip>:5601` in your browser. Log in with your OpenSearch credentials (default: `admin` / the value of `SHUFFLE_OPENSEARCH_PASSWORD` in your `.env` file).
+
+### Using Dev Tools
+
+Go to **Dev Tools** (wrench icon in the left sidebar) to run queries directly against OpenSearch without needing curl. All the queries from the [Useful OpenSearch Queries](#useful_opensearch_queries) section work here.
+
+List all Shuffle indexes:
+```
+GET _cat/indices?v
+```
+
+Find a user:
+```
+GET users/_search
+{
+  "query": {
+    "match": {
+      "username": "myuser"
+    }
+  }
+}
+```
+
+### Security Note
+
+OpenSearch Dashboards exposes read/write access to your database. Do **not** expose port 5601 to the public internet. Access it via:
+- SSH tunnel: `ssh -L 5601:localhost:5601 your-server`
+- VPN
+- Firewall rules restricted to your IP
+
 ## Extract all workflows
 
 This procedure can help you extract workflows directly from OpenSearch even if the Backend and FrontEnd are in an awkward situation.
@@ -363,6 +440,102 @@ This procedure can help you extract workflows directly from OpenSearch even if t
 This script need to be run on the folder with the file `workflows.json`, it will create a `workflows_loaded` directory with all the workflows in it.
 This can also be very useful to either backup a copy your work or export it from a lab to a prod instance.
 * [Rebuilding an OpenSearch index](#rebuilding_an_opensearch_index)
+
+## Moving from Docker in a VM to Kubernetes or SaaS
+
+If you are running Shuffle in Docker inside a VM today, it is possible to move either to an on-prem Kubernetes deployment or to Shuffle SaaS. The important part is to migrate your data in a controlled way so that existing workflows, files and configuration are not lost.
+
+### Before you start
+
+1. Identify the data you want to preserve:
+   - workflows
+   - uploaded files
+   - OpenSearch data
+   - app-related persistent storage, if used
+2. Record your current Shuffle version and image tags.
+3. Verify where your persistent data is stored in `docker-compose.yml`, especially:
+   - `shuffle-database`
+   - `shuffle-files`
+   - `shuffle-apps`
+4. Schedule downtime for the migration.
+
+**Important:** Do **not** run the old Docker-based OpenSearch instance and the new Kubernetes OpenSearch instance against the same raw data path at the same time.
+
+### Step 1: Create a backup before migration
+
+1. Export workflows from OpenSearch as an application-level backup:
+
+   ```bash
+   curl -X GET "https://localhost:9200/workflow/_search?pretty" \
+     -u <opensearch_user>:<opensearch_password> \
+     --insecure \
+     -H 'Content-Type: application/json' \
+     -d'{"size":10000,"query":{"match_all":{}}}' > workflows.json
+   ```
+
+2. Back up the persistent storage used by Shuffle:
+   - OpenSearch data directory
+   - files directory
+   - apps directory, if used for hotloading or local app state
+3. Keep a copy of your current `docker-compose.yml` and `.env` file.
+
+### Step 2A: Move from Docker/VM to Kubernetes
+
+This is the more direct migration path.
+
+1. Deploy a fresh Shuffle Kubernetes environment first. Use the Helm chart described in the Kubernetes documentation.
+2. Prepare persistent storage for the Kubernetes deployment:
+   - create Persistent Volumes / Persistent Volume Claims for Shuffle data
+   - ensure OpenSearch storage is dedicated to the Kubernetes deployment
+3. Stop the existing Docker-based Shuffle environment before migrating OpenSearch data.
+4. Move the persistent data to the target storage used by Kubernetes.
+5. Start the Kubernetes deployment and let it come up fully.
+6. Verify that the backend can connect to OpenSearch and that the UI loads correctly.
+7. Log in and verify:
+   - workflows are present
+   - uploaded files are available
+   - app execution works
+   - authentication and organizations are intact
+
+**Storage note:** `shuffle-database` in Docker is a local volume or bind mount for OpenSearch data. Kubernetes does not reuse the Docker volume name directly. Instead, it uses Persistent Volumes / Persistent Volume Claims.
+
+### Step 2B: Move from Docker/VM to Shuffle SaaS
+
+This path is possible, but it is usually handled as an export/import or support-assisted migration instead of reusing raw database files directly.
+
+1. Export the workflows you want to preserve.
+2. Export or identify any additional data that must be retained, such as files or configuration that cannot be recreated manually.
+3. Contact Shuffle support if you need help preserving more than workflow definitions.
+4. Import the workflows into the SaaS environment or follow the migration process provided by Shuffle support.
+5. Validate that:
+   - workflows are visible
+   - workflow logic is intact
+   - app credentials and environment-specific references are updated where needed
+
+**Important:** Raw OpenSearch storage from Docker should not be mounted directly into SaaS.
+
+### Step 3: Validate the migration
+
+After moving to Kubernetes or SaaS, validate the following before decommissioning the old VM:
+
+1. Open several workflows and confirm they load correctly.
+2. Run a few existing workflows end-to-end.
+3. Verify that uploaded files are accessible where relevant.
+4. Check app authentication and secrets.
+5. Review backend and OpenSearch logs for errors.
+
+### Step 4: Decommission the old environment
+
+1. Keep the old VM powered off but available until validation is complete.
+2. Confirm that the new environment is stable for normal workload.
+3. Remove or archive the old environment only after the new setup has been verified.
+
+### Summary
+
+- Docker/VM to Kubernetes: usually the simplest way to preserve existing Shuffle data.
+- Docker/VM to SaaS: possible, but normally done through export/import or support assistance.
+- Existing workflows can usually be preserved if you back up and migrate the persistent data carefully.
+- Never let two different OpenSearch deployments write to the same raw data path at the same time.
 
 ## Rebuilding an OpenSearch index
 If you lost an index due to corruption or other causes, there is no easy way to handle it. Here's a workaround we have for certain scenarios. What you'll need: access to another Shuffle instance, OR someone willing to share. Lets do an example rebuilding the environments index. This assumes opensearch is on the same server.
@@ -428,6 +601,12 @@ In certain cases, you may experience OpenSearch continuously restarting. PS: All
 1. Is there enough RAM on the device?
 1. Is there enough storage space on the device?
 1. Do you have security enabled (https & username & password), but not configured it in the `.env` file?
+
+## OpenSearch TLS certificate setup reference
+
+For full setup instructions for `SHUFFLE_OPENSEARCH_CERTIFICATE_FILE` (quick start + production hardening), see:
+
+- [/docs/configuration#opensearch-tls-certificate-setup](/docs/configuration#opensearch-tls-certificate-setup)
 
 
 ## TLS timeout error/Timeout Errors/EOF Errors
@@ -716,6 +895,38 @@ docker logs <name_of_worker>
 ```
 * All you have to do now is comb the logs and identify where the problem is, if you can't figure out where the problem is reach out to our community on discord.
 
+## Swarm init advertise address error manual fix
+
+If you see Orborus logs like this:
+
+```
+[ERROR] Swarm init issue: Error response from daemon: must specify a listening address because the address to advertise is not recognized as a system address, and a system's IP address to use could not be uniquely identified
+```
+
+it usually means Docker can not choose a unique host IP automatically.
+
+Use a host NIC IP (not a container IP) and pin it:
+
+1. Find your host IP (example output: `10.0.10.25`):
+
+```bash
+ip route get 1.1.1.1
+```
+
+2. If swarm is partially initialized, reset it first:
+
+```bash
+docker swarm leave --force || true
+```
+
+3. Initialize swarm with the same IP:
+
+```bash
+docker swarm init --listen-addr 0.0.0.0:2377 --advertise-addr 10.0.10.25:2377
+```
+
+4. Restart Orborus / stack.
+
 ## Find code OpenAPI app 
 You may have had problems with an app and need some help getting it fixed. Apps created in the app creator of Shuffle also do generate underlying Python code utilizing the same capabilities as if you make a Python function from scratch. Here's how to find the code for a function.
 
@@ -811,6 +1022,8 @@ curl -k -u admin:StrongShufflePassword321! https://localhost:9200/users/_update/
 ## No module named 'xyz' in 'execute python' (Shuffle Tools)
 
 If you want to install a custom module like pandas (although, 'execute python' isn't made for heavy processing. We recommend making a custom python app for it).
+
+**Important:** Shuffle automatically pulls and updates the Shuffle Tools image on startup, which may overwrite your custom-built image. To prevent this, set the environment variable `SHUFFLE_AUTO_IMAGE_DOWNLOAD=false` in your Orborus/worker configuration before building a custom image.
 
 There are two primary ways to it:
 1. Learn about dynamic library loading in your code (not recommended)

@@ -1,10 +1,12 @@
 # Shuffle API 
 Documentation for the Shuffle API. Change https://shuffler.io with your local domain/IP for on-premises usage.
 
-- US (California): https://california.shuffler.io
+- UK (London - default): https://uk.shuffler.io
 - Germany (Frankfurt): https://frankfurt.shuffler.io
+- US (California): https://california.shuffler.io
 - Canada (Montréal): https://ca.shuffler.io
-- Likely regions in 2025/2026: Japan (Tokyo, asia-northeast1), Australia (Sydney, australia-southeast1), India (Mumbai, asia-south1), Brazil (São Paulo, southamerica-east1). Shuffle Regions can be deployed quickly - if you need a specific region, [please check if Google Cloud Platform (GCP) supports it](https://cloud.google.com/about/locations#americas).
+- Australia (Sydney) - **TEST REGION**: https://au.shuffler.io
+- Likely regions in 2026-2027: Japan (Tokyo, asia-northeast1), India (Mumbai, asia-south1), Brazil (São Paulo, southamerica-east1). New Regions can be deployed quickly - if you need a specific region, [please check if Google Cloud Platform (GCP) supports it and contact us](https://cloud.google.com/about/locations#americas).
 
 Check your current location on the [/admin page](https://shuffler.io). Use the dropdown menu to change regions.
 <img width="1148" alt="image" src="https://github.com/user-attachments/assets/92408590-7ba0-4ecf-891f-4799eb8ffedf" />
@@ -13,6 +15,7 @@ Check your current location on the [/admin page](https://shuffler.io). Use the d
 * [Introduction](#introduction)
 * [Authentication](#authentication)
 * [Responses](#responses)
+* [MCP & Agents](#MCP)
 * [Workflows](#workflow-api)
 * [Stats & Timelines](#stats-and-timelines)
 * [Triggers](#triggers)
@@ -25,7 +28,8 @@ Check your current location on the [/admin page](https://shuffler.io). Use the d
 * [Notifications](#notifications)
 * [Priorities](#priorities)
 * [Environments](#environments)
-* [Integration Layer - Beta](#integration-layer)
+* [Detection](#detection-api)
+* [Singul](#singul)
 
 
 
@@ -42,13 +46,13 @@ Shuffle uses [Bearer auth](https://swagger.io/docs/specification/authentication/
 While logged in, you can go to https://shuffler.io/settings or /settings in your local instance to get your APIkey. Keep this safe. 
 
 **Get all apps example**
-```
+```bash
 curl https://shuffler.io/api/v1/apps -H "Authorization: Bearer APIKEY"
 ```
 
 **Authentication failure**
 Status code: 401
-```
+```json
 {"success": false}
 ```
 
@@ -56,7 +60,7 @@ Status code: 401
 ## Responses
 Shuffle responses follow the response codes listed below. The data you can expect is mostly in the following json form, whether success or failure.
 
-```
+```json
 {
 	"success": <true/false>,
 	"reason": "You failed to do something"
@@ -71,16 +75,118 @@ Shuffle responses follow the response codes listed below. The data you can expec
 | 405    | Method not allowed. We use GET/POST/PUT/DELETE |
 | 500    | A backend error occurred. |
 
+## MCP
+The MCP- and Agent-API is built to handle MCP workloads when the speed and determinism of workflows is not required. This is typically in cases of analysis, long-term processing or to perform tasks you otherwise would not know how to. 
+
+Shuffle follows the [Model Context Protocol (MCP) strictly](https://modelcontextprotocol.io/docs/getting-started/intro), to be as interoperable with other platforms as possible. We support both short- and long-running tasks (hours and days), including the control of agent reasoning as well as self-hosted LLM models.  The MCP system in Shuffle is built on HTTP, and is built for both cloud- and on-premises remote-controlled actions.
+
+Shuffle version required: `>=2.2.1`. ALL MCP and Agent actions are available to look into [in the Runtime Debugger](/workflows/debug). The [frontend library Shuffle MCPs](https://security.shuffler.io/shuffle-mcp-demo) is available to be put in your platform as well.
+
+<img width="1180" height="279" alt="image" src="https://github.com/user-attachments/assets/d981ce44-15b4-4393-be0f-51c1aeac67ff" />
+
+### Run an MCP action
+Runs a task using the chosen tools. In the output, `result.message` is the raw output from the MCP server, with the rest talking about time and how it ran. If it does not return within 1 minute, use the execution_id and authorization to poll for it to finish.
+
+Supported body parameters:
+
+- `params.reasoning = minimal/low/medium/high` - How much reasoning effort the model should use. Tokens affect this.
+- `params.environment = <runtime_location>` - Which [runtime location to run actions in](/admin?tab=runtime_locations). Allows for remote-control of servers (in safe container environments).
+- `params.enable_questions = true` - If you want the MCP to be able to ask questions. Requires polling `POST /api/v1/streams {"execution_id": "id", "authorization": "auth"}` and/or `GET /api/v1/notifications?type=agent_questions`
+- `params.authentication_id = <specific authentication>` - If you want to use a specific authentication ID for the app(s).
+
+Method: POST
+
+```bash
+curl localhost:5002/api/v1/mcp -d '{"method": "tools/call", "params": {"tool_name": "outlook", "input": {"text": "send me an email with the subject 'heloo'"}, "reasoning": "minimal"}}'
+```
+
+**Success response**
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "allowed_actions": [
+      ""
+    ],
+    "authorization": "28bb827f-4a9c-4d7b-8ed5-f9a0ff994a9c",
+    "completed_at": 1777973989995,
+    "completion_tokens": 219,
+    "execution_id": "49d01bec-b10b-49ae-a639-d5e79f21652f",
+    "llm_call_count": 1,
+    "message": "An email has been sent. Look into the execution if you need further details.",
+    "notifications": 0,
+    "original_input": "send me an email with the subject 'heloo'",
+    "prompt_tokens": 1293,
+    "started_at": 1777973989995,
+    "status": "FINISHED",
+    "total_tokens": 1512
+  }
+}
+```
+
+### Run an agent action
+Running the agent action is the EXACT same as the MCP API, with the only difference being that it responds immediately with the execution ID and authorization instead of waiting for the full execution to finish. After getting the execution_id and authorization, you can call `POST /api/v1/streams {"execution_id": "id", "authorization": "auth"}` to poll for it finishing. This has no timeout. 
+
+Method: POST
+
+```bash
+curl localhost:5002/api/v1/agent -d '{"method": "tools/call", "params": {"tool_name": "outlook", "input": {"text": "send me an email with the subject 'heloo'"}, "reasoning": "minimal"}}'
+```
+
+**Success response**
+```json
+{
+  "success": true,
+  "execution_id": "49d01bec-b10b-49ae-a639-d5e79f21652f",
+  "authorization": "28bb827f-4a9c-4d7b-8ed5-f9a0ff994a9c"
+}
+```
+
+
+### Ping
+Validates if the Shuffle Agent & MCP system is available or not
+
+Method: POST
+
+```bash
+curl localhost:5002/api/v1/mcp -d '{"id": 1337, "method": "ping"}'
+```
+
+**Success response**
+```json
+{"jsonrpc":"2.0","id":1337,"result":{"timestamp":"2026-05-05T09:21:03Z","uptime":3600}}
+```
+
+### Listing available tools
+Lists the most used actions within an App using the `tools/list` Method. Works for a single app. 
+
+If you want a specific app ID, use `tool_id`. This works with private apps as well:
+
+- `params.tool_id = <app ID>`
+
+Method: POST
+
+```bash
+curl localhost:5002/api/v1/mcp -d '{"id": 1337, "method": "tools/list", "params": {"tool_name": "outlook"}}'
+```
+
+**Success response**
+```json
+{"jsonrpc":"2.0","id":1337,"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{"list":false,"call":false}},"serverInfo":{"name":"shuffle","version":"0.0.1"},"tools":[{"name":"post_move_message","description":"Move a message to another folder within the specified user's mailbox.\n\nhttps://graph.microsoft.com/v1.0/me/messages/{id}/move","inputSchema":{"type":"object","properties":{"body":{"type":"string"},"headers":{"type":"string","description":"Add or edit headers"},"id":{"type":"string"},"queries":{"type":"string","description":"Add or edit queries"},"ssl_verify":{"type":"string","description":"Check if you want to verify request"},"to_file":{"type":"string","description":"Choose if we should write the result straight to a file or not"}},"required":["id","headers","queries","ssl_verify","to_file","body"]}},{"name":"get_raw_email_as_file","description":"\n\nhttps://graph.microsoft.com/v1.0/me/messages/{message_id}/$value","inputSchema":{"type":"object","properties":{"headers":{"type":"string","description":"Add or edit headers"},"message_id":{"type":"string"},"queries":{"type":"string","description":"Add or edit queries"},"ssl_verify":{"type":"string","description":"Check if you want to verify request"},"to_file":{"type":"string","description":"Choose if we should write the result straight to a file or not"}},"required":["message_id","headers","queries","ssl_verify","to_file"]}},{"name":"get_list_users_mailfolders","description":"List mailFolders\n\nhttps://graph.microsoft.com/v1.0/users/{user_id}/mailFolders","inputSchema":{"type":"object","properties":{"headers":{"type":"string","description":"Add or edit headers"},"queries":{"type":"string","description":"Add or edit queries"},"ssl_verify":{"type":"string","description":"Check if you want to verify request"},"to_file":{"type":"string","description":"Choose if we should write the result straight to a file or not"},"user_id":{"type":"string"}},"required":["user_id","headers","queries","ssl_verify","to_file"]}},{"name":"post_search_emails","description":"Searches the email mailbox\n\nhttps://graph.microsoft.com/v1.0/search/query","inputSchema":{"type":"object","properties":{"body":{"type":"string"},"headers":{"type":"string","description":"Add or edit headers"},"queries":{"type":"string","description":"Add or edit queries"},"ssl_verify":{"type":"string","description":"Check if you want to verify request"},"to_file":{"type":"string","description":"Choose if we should write the result straight to a file or not"}},"required":["headers","queries","ssl_verify","to_file","body"]}},{"name":"post_add_attachment","description":"Use this API to add an attachment to an existing event. This operation limits the size of the attachment you can add to under 3 MB.\n\nhttps://graph.microsoft.com/v1.0/me/events/{id}/attachments","inputSchema":{"type":"object","properties":{"body":{"type":"string"},"headers":{"type":"string","description":"Add or edit headers"},"id":{"type":"string"},"queries":{"type":"string","description":"Add or edit queries"},"ssl_verify":{"type":"string","description":"Check if you want to verify request"},"to_file":{"type":"string","description":"Choose if we should write the result straight to a file or not"}},"required":["id","headers","queries","ssl_verify","to_file","body"]}},{"name":"get_list_mailfolders_","description":"List mailFolders\n\nhttps://graph.microsoft.com/v1.0/me/mailFolders","inputSchema":{"type":"object","properties":{"headers":{"type":"string","description":"Add or edit headers"},"queries":{"type":"string","description":"Add or edit queries"},"ssl_verify":{"type":"string","description":"Check if you want to verify request"},"to_file":{"type":"string","description":"Choose if we should write the result straight to a file or not"}},"required":["headers","queries","ssl_verify","to_file"]}},{"name":"post_forward_a_message_","description":"Forward a message. The message is then saved in the Sent Items folder.\n\nhttps://graph.microsoft.com/v1.0/me/messages/{id}/forward","inputSchema":{"type":"object","properties":{"body":{"type":"string"},"headers":{"type":"string","description":"Add or edit headers"},"id":{"type":"string"},"queries":{"type":"string","description":"Add or edit queries"},"ssl_verify":{"type":"string","description":"Check if you want to verify request"},"to_file":{"type":"string","description":"Choose if we should write the result straight to a file or not"}},"required":["id","headers","queries","ssl_verify","to_file","body"]}},{"name":"post_forward_message","description":"Forward a message using JSON forma\n\nhttps://graph.microsoft.com/v1.0/me/messages/{id}/forward","inputSchema":{"type":"object","properties":{"body":{"type":"string"},"headers":{"type":"string","description":"Add or edit headers"},"id":{"type":"string"},"queries":{"type":"string","description":"Add or edit queries"},"ssl_verify":{"type":"string","description":"Check if you want to verify request"},"to_file":{"type":"string","description":"Choose if we should write the result straight to a file or not"}},"required":["id","headers","queries","ssl_verify","to_file","body"]}},{"name":"get_me_calendar","description":"Get calendar\n\nhttps://graph.microsoft.com/v1.0/me/calendar","inputSchema":{"type":"object","properties":{"headers":{"type":"string","description":"Add or edit headers"},"queries":{"type":"string","description":"Add or edit queries"},"ssl_verify":{"type":"string","description":"Check if you want to verify request"},"to_file":{"type":"string","description":"Choose if we should write the result straight to a file or not"}},"required":["headers","queries","ssl_verify","to_file"]}},{"name":"get_child_folders_in_folder","description":"\n\nhttps://graph.microsoft.com/v1.0/me/mailFolders/{id}/childFolders","inputSchema":{"type":"object","properties":{"headers":{"type":"string","description":"Add or edit headers"},"id":{"type":"string"},"queries":{"type":"string","description":"Add or edit queries"},"ssl_verify":{"type":"string","description":"Check if you want to verify request"},"to_file":{"type":"string","description":"Choose if we should write the result straight to a file or not"}},"required":["id","headers","queries","ssl_verify","to_file"]}},{"name":"get_list_rules_shared_mail","description":"Get all the messageRule objects defined for the user's inbox.\n\nhttps://graph.microsoft.com/v1.0/users/{id}/mailFolders/inbox/messagerules","inputSchema":{"type":"object","properties":{"headers":{"type":"string","description":"Add or edit headers"},"id":{"type":"string"},"queries":{"type":"string","description":"Add or edit queries"},"ssl_verify":{"type":"string","description":"Check if you want to verify request"},"to_file":{"type":"string","description":"Choose if we should write the result straight to a file or not"}},"required":["id","headers","queries","ssl_verify","to_file"]}},{"name":"delete_approleassignment","description":"Delete appRoleAssignment\n\nhttps://graph.microsoft.com/v1.0/users/{user_id}/appRoleAssignments/{id}","inputSchema":{"type":"object","properties":{"body":{"type":"string"},"headers":{"type":"string","description":"Add or edit headers"},"id":{"type":"string"},"queries":{"type":"string","description":"Add or edit queries"},"ssl_verify":{"type":"string","description":"Check if you want to verify request"},"to_file":{"type":"string","description":"Choose if we should write the result straight to a file or not"},"user_id":{"type":"string"}},"required":["user_id","id","headers","queries","ssl_verify","to_file","body"]}}]}}
+```
 
 ## Workflow API
 Workflows are used to execute your automations, and has endpoints related to creation, triggers, saving and deleting, aborting and listing.
 
 ### List all workflows
-Return a list of all existing workflows
+Return a list of all existing workflows. 
+
+Disable truncating (since 2.0.2)**: Add the `truncate=false` header, and we will directly return the list without modifications IF it is less than 32Mb in size. 
+We may otherwise truncate the data, and add the `X-SHUFFLE_TRUNCATED=true` response header if the data is sufficiently large.
 
 Method: GET
 
-```
+```bash
 curl https://shuffler.io/api/v1/workflows -H "Authorization: Bearer APIKEY"
 ```
 
@@ -90,12 +196,13 @@ Returns a list of executions for a given workflow. Use "top=10" to get 10 last r
 
 Method: GET
 
-```
+```bash
 curl https://shuffler.io/api/v1/workflows/{workflow_id}/executions -H "Authorization: Bearer APIKEY"
 ```
 
 **Success response**
-```
+
+```json
 {
   "success": true,
   "executions": [],
@@ -108,12 +215,13 @@ Returns a list of executions for a given workflow
 
 Method: GET
 
-```
+```bash
 curl https://shuffler.io/api/v1/workflows/{workflow_id}/executions -H "Authorization: Bearer APIKEY"
 ```
 
 **Success response**
-```
+
+```json
 []
 ```
 
@@ -123,22 +231,51 @@ Returns a given workflow. This is the same as exporting the workflow.
 
 Method: GET
 
-```
+```bash
 curl https://shuffler.io/api/v1/workflows/{workflow_id} -H "Authorization: Bearer APIKEY"
 ```
 
+### Upload a Workflow
+
+**Method:** `POST`
+
+To download a single workflow, provide the full repository path to the specific workflow file.  
+To download all workflows from a repository, provide the repository base URL.
+
+The `Org-Id` header is optional. If specified, the workflow(s) will be downloaded and imported into the given organization. If Org-Id not provided then they will be imported into the user’s currently active organization.
+
+If the Git provider is already configured at the organization, `username` and `password` is optional in the body. In such cases, the Shuffle will use the credentials configured for that organization.
+
+Currently, the following Git providers are supported:
+- GitHub  
+- GitLab  
+- Bitbucket  
+- Azure DevOps
+
+```bash
+curl -X POST "{BASE_URL}/api/v1/workflows/download_remote" \
+  -H "Authorization: Bearer <API_TOKEN>" \
+  -H "Org-Id: <ORG_ID>" \
+  -d '{
+    "url": "https://example.com/repo/path/workflow.json",
+    "branch": "main",
+    "username": "git-user",
+    "password": "PAT"
+  }'
+```
 
 ### Create new workflow
 Creates a basic workflow with a given name and description. Returns a startpoint for a workflow. 
 
 Method: POST
 
-```
+```bash
 curl -XPOST https://shuffler.io/api/v1/workflows -H "Authorization: Bearer APIKEY" -d '{"name": "Example API workflow", "description": "Description for the workflow"}'
 ```
 
 **Success response**
-```
+
+```json
 {"actions":[],"branches":[],"triggers":[],"schedules":null,"id":"25cb3cc6-f343-4511-827f-b60557043327","is_valid":true,"name":"Example API workflow","description":"Description for the workflow","start":"","owner":"4669463f-f98e-4d86-891d-76edac4356c6","sharing":"private","execution_org":{"name":"","org":"","users":null,"id":""},"workflow_variables":null}
 ```
 
@@ -150,12 +287,12 @@ Saves a workflow with a given WORKFLOW_ID. Requires WORKFLOW_ID from [Create new
 
 Method: PUT
 
-```
+```bash
 curl -XPUT https://shuffler.io/api/v1/workflows/WORKFLOW_ID -H "Authorization: Bearer APIKEY" --data '{"actions":[],"branches":[],"triggers":[],"schedules":null,"id":"WORKFLOW_ID","is_valid":true,"name":"Example workflow","description":"Description for the workflow","start":"","owner":"4669463f-f98e-4d86-891d-76edac4356c6","sharing":"private","execution_org":{"name":"","org":"","users":null,"id":""},"workflow_variables":null}'
 ```
 
 **Success response** 
-```
+```json
 {"success": true}
 ```
 
@@ -165,23 +302,27 @@ Deletes a workflow with a given ID.
 
 Method: DELETE
 
-```
+```bash
 curl -XDELETE https://shuffler.io/api/v1/workflows/apcb3cc6-f343-4511-827f-b60557043327 -H "Authorization: Bearer APIKEY" 
 ```
 
 **Success response** 
-```
+
+```json
 {"success": true}
 ```
 
 
 ### Execute workflow
-Executes a given workflow with optional arguments "execution_argument" and "start". Start is the node to execute from.  
+Executes a given workflow with optional arguments "execution_argument" and "start". Start is an optional node to start from. [See Additional Optional Arguments](https://github.com/Shuffle/shuffle-shared/blob/57b211816d87b47acde1481084b187fda13d05ba/structs.go#L126).
 
 Methods: POST, GET
 
-```
-curl -XPOST https://shuffler.io/api/v1/workflows/{workflow_id}/execute -H "Authorization: Bearer APIKEY" -d '{"execution_argument": "DATA TO EXECUTE WITH", "start": ""}'
+```bash
+curl -XPOST https://shuffler.io/api/v1/workflows/{workflow_id}/execute -H "Authorization: Bearer APIKEY" -d '{
+	"execution_argument": "DATA TO EXECUTE WITH",
+	"start": ""
+}'
 ```
 
 Additional info:
@@ -190,7 +331,8 @@ Additional info:
 - If you want to run the workflow with a different environment, use the "environment" header with the name. Example: 'environment: cloud'. The environment needs to be the name of an existing environment.
 
 **Success response** 
-```
+
+```json
 {"success": true, "execution_id": "6e58639e-a24f-4af8-b62b-d6fcc2bc10f4", "authorization": "26fb304f-92c9-4ca5-9735-9173ce80569e"}
 ```
 
@@ -200,12 +342,16 @@ Gets an execution based on results from [Execute workflow](/docs/api#execute_wor
 
 Methods: POST
 
-```
-curl -XPOST https://shuffler.io/api/v1/streams/results -d '{"execution_id": "ad9baac7-dc30-42da-bb1f-18b84309cfb7", "authorization": "62b3de56-9de0-4983-ad72-e63c42d123f8"}'
+```bash
+curl -XPOST https://shuffler.io/api/v1/streams/results -d '{
+	"execution_id": "ad9baac7-dc30-42da-bb1f-18b84309cfb7",
+	"authorization": "62b3de56-9de0-4983-ad72-e63c42d123f8"
+}'
 ```
 
 **Success response** 
-```
+
+```json
 {"type":"workflow","status":"ABORTED","start":"","execution_argument":"DATA TO EXECUTE WITH","execution_id":"ad9baac7-dc30-42da-bb1f-18b84309cfb7","workflow_id":"8f3c6a10-f5ca-432c-aef9-c5e038166c45","last_node":"","authorization":"62b3de56-9de0-4983-ad72-e63c42d123f8","result":"","started_at":1591074812,"completed_at":1591074857,"project_id":"shuffle","locations":["europe-west2"],"workflow":{"actions":[{"app_name":"testing","app_version":"1.0.0","app_id":"c567fc10-9c15-403e-b72c-6550e9e76bc8","errors":null,"id":"de10798e-2c66-4e0c-bfdd-8b645a8e3748","is_valid":true,"isStartNode":true,"sharing":true,"private_id":"","label":"testing_1","small_image":"","large_image":"","environment":"Shuffle","name":"repeat_back_to_me","parameters":[{"description":"message to repeat","id":"","name":"call","example":"","value":"232.21.10.12","multiline":true,"action_field":"","variant":"STATIC_VALUE","required":true,"schema":{"type":"string"}}],"position":{"x":-326.750381666118,"y":52.50022245682308},"priority":0},{"app_name":"Virustotal","app_version":"1.0.0","app_id":"e5d625cee91f5f8328f2f4ef09ef313e","errors":null,"id":"bdec0a1c-381c-4e90-ba04-db40db98406c","is_valid":true,"isStartNode":false,"sharing":false,"private_id":"e5d625cee91f5f8328f2f4ef09ef313e","label":"Virustotal_1","small_image":"","large_image":"","environment":"Shuffle","name":"get_ip_report","parameters":[{"description":"The apikey to use","id":"","name":"apikey","example":"","value":"","multiline":false,"action_field":"VT APIKEY","variant":"WORKFLOW_VARIABLE","required":true,"schema":{"type":"string"}},{"description":"Generated by shuffler.io OpenAPI","id":"","name":"ip","example":"","value":"128.0.0.11","multiline":false,"action_field":"","variant":"STATIC_VALUE","required":true,"schema":{"type":"string"}}],"position":{"x":-657.9998647811465,"y":52.000953074820615},"priority":0}],"branches":[{"destination_id":"bdec0a1c-381c-4e90-ba04-db40db98406c","id":"7ad84769-3e7f-48af-af73-802bc93b5c2c","source_id":"de10798e-2c66-4e0c-bfdd-8b645a8e3748","label":"","has_errors":false,"conditions":null}],"triggers":null,"schedules":null,"id":"8f3c6a10-f5ca-432c-aef9-c5e038166c45","is_valid":true,"name":"VT testing","description":"Helo","start":"de10798e-2c66-4e0c-bfdd-8b645a8e3748","owner":"4669463f-f98e-4d86-891d-76edac4356c6","sharing":"private","execution_org":{"name":"","org":"","users":null,"id":""},"workflow_variables":[{"description":"","id":"ec16e9a6-5d13-46ba-8613-ebf301569f44","name":"VT APIKEY","value":""}]},"results":null}
 ```
 
@@ -216,14 +362,109 @@ Aborts an execution based on a WORKFLOW_ID and EXECUTION_ID. Can only be done wh
 
 Methods: GET
 
-```
+```bash
 curl https://shuffler.io/api/v1/workflows/{workflow_id}/executions/{execution_id}/abort -H "Authorization: Bearer APIKEY"
 ```
 
 **Success response** 
-```
+
+```json
 {"success": true}
 ```
+
+## Datastore API
+Datastore is a persistent storage mechanism you can use for workflows to talk to each other between executions, or for normal storage. Below are the endpoints related to datastore (cache) creation, listing, deletion and more. This API is available to Python apps by using self.set_cache("key", "value", category="category") and self.get_cache("key", category="category")
+
+### Set a key
+Add a key to the Shuffle Datastore (previously called `cache`). To add a key to a specific category, add `"category": "name"` to the JSON body. The `value` field can be anything, but preferrably JSON. You can add Enrichments using the `enrichments` field with the format `[{"type": "ip", "value": 1.2.3.4"}]` which is used heavily in Shuffle Security. `ignore_security_rules` is only relevant IF you have enabled security rules for the category you are in, which restricts who and what can write to a key.
+
+Methods: POST, PUT
+
+```bash
+curl https://shuffler.io/api/v1/orgs/{org_id}/set_cache -H "Authorization: Bearer APIKEY" -d '{"key":"hi", "value":"1234", "category": "category", "ignore_security_rules": false}'
+```
+
+
+**Success response** 
+```json
+{"success": true, "keys_existed": [{"key": "hi", "existed": true }]}
+```
+
+### Set multiple keys
+Accepts a list in the same format as [Set a key](#set_a_key), and is very efficient at bulk updates. Returns which keys are new and which were updated. To add a key to a specific category, add `"category": "name"` to the JSON body. **PS:** Only keys of the first discovered category will be added.
+
+Methods: POST, PUT
+
+```bash
+curl https://shuffler.io/api/v2/datastore?bulk=true -H "Authorization: Bearer APIKEY" -d '[{"key":"testKey1", "value":"1234", "category": "category"}, {"key":"testKey2", "value":"1234", "category": "category"}]'
+```
+
+
+**Success response** 
+```json
+{"success": true, "keys_existed": [{"key": "testKey1", "existed": true }, { "key": "testKey2", "existed": false}]}
+```
+
+
+### Get a key
+Search for a cache key. For keys set in a workflow, it may unavailable with the normal API, and require execution_id & authorization in the JSON body.
+
+To get a key from a specific category, add `"category": "name"` to the JSON body.
+ 
+Methods: POST
+
+```bash
+curl https://shuffler.io/api/v1/orgs/{org_id}/get_cache -H "Authorization: Bearer APIKEY" -d '{"org_id": "ORG_ID", "key": "hi"}'
+```
+
+
+**Success response** 
+```json
+{
+"success": true, "workflow_id": "99951014-f0b1-473d-a474-4dc9afedkb81", "execution_id": "f0b2b4e9-90ca-4835-bdd4-2889ef5ls2u5", "key": "hi", "value": "1234", "category": "category", "created": 1761114186, "edited": 1761114186, "changed": true, "encrypted": false, "public_authorization":"efbd9m2sy-f07c-4167-aa32-642b1429814d", "suborg_distribution": null, "revision_id": ""
+}
+```
+
+
+### List all keys
+List existing datastore (cache) keys. By default, this will include the 50 last modified keys from any category. 
+
+To list keys from a specific category, ?category=<name> to the URL.
+
+Available queries:
+- top: default 50. How many keys to return.
+- cursor: to get the next page
+- category: the category to get
+
+Methods: GET
+
+```bash
+curl https://shuffler.io/api/v1/orgs/{org_id}/list_cache -H "Authorization: Bearer APIKEY"
+```
+
+
+**Success response** 
+```json
+{"success":true,"keys":[{"success":false,"workflow_id":"99951014-f0b1-473d-a474-4dc9afecaa75","execution_id":"f0b2b4e9-90ca-4835-bdd4-2889ef5f926f","org_id":"2e7b6a08-b63b-4fc2-bd70-718091509db1","key":"hi","value":"1234"}]}
+```
+
+### Delete a key
+Deletes a key, completely removing all references to it. 
+
+To delete a key from a specific category, add `"category": "name"` to the JSON body.
+
+Methods: POST
+
+```bash
+curl -XPOST https://shuffler.io/api/v1/orgs/{org_id}/delete_cache  -H "Authorization: Bearer APIKEY" -d '{"org_id": "ORG_ID", "key": "hi", "category": ""}'
+```
+
+
+**Success response** 
+```json
+{"success": true}
+```
+
 
 ## App API
 Apps are the building blocks used in [workflows](/docs/apps#workflows), as they contain the actions to be executed. First of all, there are two types of apps:
@@ -240,7 +481,7 @@ Returns a list of existing apps that you have access to, including private ones.
 
 Methods: GET
 
-```
+```bash
 curl https://shuffler.io/api/v1/apps -H "Authorization: Bearer APIKEY"
 ```
 
@@ -249,7 +490,7 @@ Deletes an app if you have access to delete it.
 
 Methods: DELETE
 
-```
+```bash
 curl -XDELETE https://shuffler.io/api/v1/apps/{app_id} -H "Authorization: Bearer APIKEY"
 ```
 
@@ -275,11 +516,11 @@ app.zip
 
 Methods: POST
 
-```
+```bash
 curl https://shuffler.io/api/v1/apps/upload -H "Authorization: Bearer APIKEY" -F 'shuffle_file=@./your_file/file_path/app.zip'
 ```
 **Success response** 
-```
+```json
 {"success": true, "id": "798f1234c4fb8b4a6300da3c546af45a"}
 ```
 
@@ -294,14 +535,16 @@ If you want to see whether your app was uploaded or not, you can always check th
 ## Stats and Timelines
 Stats and Timelines are a system built to help track changes to something over time. This is used both by internal systems in Shuffle, and is an option for you to use in Workflows or elsewhere to make timelines. Adding statistics was added in versions >1.4.3, and graphing of ANY value will be available soon. Graphs for default tracked information like App and Workflow utilisation is on the [statistics admin page for your Organisation](https://shuffler.io/admin?admin_tab=billing). 
 
-**PS: Statistics are visible to you for every 5th number counted. This means you need to count the number 1 five times, or any number higher than 5 one time for it to be visible.**
+The [new dashboard page allows for customisation of a bar graph](/new-dashboard). You may view your custom stats here. We will introduce custom dashboard controls in future versions of Shuffle.
+
+<img width="1398" height="423" alt="image" src="https://github.com/user-attachments/assets/97212387-d376-4211-9321-157f6817b272" />
 
 ### Get Stats
 Returns the statistics for an organisation
 
 Method: GET
 
-```
+```bash
 curl https://shuffler.io/api/v1/orgs/{ORG_ID}/stats  -H "Authorization: Bearer APIKEY"
 ```
 
@@ -359,12 +602,12 @@ Use the "Count Stats" action in Shuffle tools to do this in a Workflow
 
 Method: POST
 
-```
+```bash
 curl https://shuffler.io/api/v1/orgs/{ORG_ID}/stats  -H "Authorization: Bearer APIKEY" -d '{"key": "tickets", "value": 6}'
 ```
 
 **Success response**
-```
+```json
 {"success": true, "reason": "Cache incremented by 6"}
 ```
 
@@ -386,12 +629,12 @@ Get a list of all app authentication. These are all the authentication currently
 
 Methods: GET
 
-```
+```bash
 curl https://shuffler.io/api/v1/apps/authentication -H "Authorization: Bearer APIKEY"
 ```
 
 **Success response** 
-```
+```json
 {"success": true, "data": []}
 ```
 
@@ -400,13 +643,13 @@ When you have an authentication available, it is possible to set it everywhere u
 
 Methods: POST
 
-```
+```bash
 curl -XPOST https://shuffler.io/api/v1/apps/authentication/{authentication_id}/config -H "Authorization: Bearer APIKEY" -d '{"action"
 : "assign_everywhere", "id": "authentication_id"}'
 ```
 
 **Success response**
-```
+```json
 {"success": true}
 ```
 
@@ -415,13 +658,13 @@ Parent organizations have the option to allow child orgs to use the same auth. T
 
 Methods: POST
 
-```
+```bash
 curl -XPOST https://shuffler.io/api/v1/apps/authentication/{authentication_id}/config -H "Authorization: Bearer APIKEY" -d '{"action"
 : "suborg_distribute", "id": "authentication_id"}'
 ```
 
 **Success response**
-```
+```json
 {"success": true}
 ```
 
@@ -430,12 +673,12 @@ Delete an authentication. PS: This does NOT change the ID of every workflow that
 
 Methods: DELETE
 
-```
+```bash
 curl https://shuffler.io/api/v1/apps/authentication/{authentication_id} -H "Authorization: Bearer APIKEY"
 ```
 
 **Success response** 
-```
+```json
 {"success": true}
 ```
 
@@ -451,7 +694,7 @@ You can find the fields following these steps:
 
 Method: PUT
 
-```
+```bash
 curl -XPUT https://shuffler.io/api/v1/apps/authentication -H "Authorization: Bearer APIKEY" '{
 	"label":"Auth for Jira",
 	"app": {
@@ -468,7 +711,7 @@ curl -XPUT https://shuffler.io/api/v1/apps/authentication -H "Authorization: Bea
 ```
 
 **Success response** 
-```
+```json
 {"success": true, "id": "app_id"}
 ```
 
@@ -479,12 +722,12 @@ Example: {"search": "secure"} will match both "secureworks" and "Cisco openVuln"
 
 Methods: POST
 
-```
+```bash
 curl https://shuffler.io/api/v1/apps/search -H "Authorization: Bearer APIKEY" -d '{"search": "APPNAME"}'
 ```
 
 **Success response** 
-```
+```json
 {"success": true, "reason": [{apps here}]}
 ```
 
@@ -500,7 +743,7 @@ Lists all available users. Requires admin rights.
 
 Methods: GET
 
-```
+```bash
 curl https://shuffler.io/api/v1/users/getusers -H "Authorization: Bearer APIKEY" 
 ```
 
@@ -512,13 +755,13 @@ Registers a user based on the username and password provided. If it's the first 
 
 Methods: POST
 
-```
+```bash
 curl https://shuffler.io/api/v1/users/register -H "Authorization: Bearer APIKEY" -d '{"username": "username", "password": "P@ssw0rd"}'
 ```
 
 
 **Success response** 
-```
+```json
 {"success": true}
 ```
 
@@ -531,13 +774,13 @@ Supported fields:
 
 Methods: PUT
 
-```
-curl https://shuffler.io/api/v1/users/updateuser -H "Authorization: Bearer APIKEY" -d '{"user_id": "USERID", "role": "user"}'
+```bash
+curl -X PUT https://shuffler.io/api/v1/users/updateuser -H "Authorization: Bearer APIKEY" -d '{"user_id": "USERID", "role": "user"}'
 ```
 
 
 **Success response** 
-```
+```json
 {"success": true}
 ```
 
@@ -546,13 +789,13 @@ Deactivates a user. This exists instead of a deletion method. Requires admin rig
 
 Method: DELETE 
 
-```
-curl -XDELETE https://shuffler.io/api/v1/users/{userid} -H "Authorization: Bearer APIKEY" 
+```bash
+curl -X DELETE https://shuffler.io/api/v1/users/{userid} -H "Authorization: Bearer APIKEY" 
 ```
 
 
 **Success response** 
-```
+```json
 {"success": true}
 ```
 
@@ -561,91 +804,14 @@ Re-generates a new apikey. Requires admin for POST. GET changes YOUR apikey. The
 
 Methods: GET, POST (admin)
 
-```
+```bash
 curl https://shuffler.io/api/v1/users/generateapikey -H "Authorization: Bearer APIKEY" -d '{"user_id": "id"}'
 ```
 
 
 **Success response** 
-```
+```json
 {"success": true, "username": "username", "verified": false, "apikey": "new apikey"}
-```
-
-## Datastore API
-Datastore is a persistent storage mechanism you can use for workflows to talk to each other between executions, or for normal storage. Below are the endpoints related to datastore (cache) creation, listing, deletion and more. This API is available to Python apps by using self.set_cache("key", "value") and self.get_cache("key")
-
-### Add a key
-To add or edit a cache key use 
-
-To add a key to a specific category, add `"category": "name"` to the JSON body.
-
-Methods: POST, PUT
-
-```
-curl https://shuffler.io/api/v1/orgs/{org_id}/set_cache -H "Authorization: Bearer APIKEY" -d '{"key":"hi", "value":"1234"}'
-```
-
-
-**Success response** 
-```
-{"success": true}
-```
-
-### Get a key
-Search for a cache key. For keys set in a workflow, it may unavailable with the normal API, and require execution_id & authorization in the JSON body.
-
-To get a key from a specific category, add `"category": "name"` to the JSON body.
- 
-Methods: POST
-
-```
-curl https://shuffler.io/api/v1/orgs/{org_id}/get_cache -H "Authorization: Bearer APIKEY" -d '{"org_id": "ORG_ID", "key": "hi"}'
-```
-
-
-**Success response** 
-```
-{"success":false,"workflow_id":"99951014-f0b1-473d-a474-4dc9afecaa75","execution_id":"f0b2b4e9-90ca-4835-bdd4-2889ef5f926f","org_id":"2e7b6a08-b63b-4fc2-bd70-718091509db1","key":"hi","value":"1234"}
-```
-
-
-### List all keys
-List existing datastore (cache) keys. By default, this will include the 50 last modified keys from any category. 
-
-To list keys from a specific category, ?category=<name> to the URL.
-
-Available queries:
-- top: default 50. How many keys to return.
-- cursor: to get the next page
-- category: the category to get
-
-Methods: GET
-
-```
-curl https://shuffler.io/api/v1/orgs/{org_id}/list_cache -H "Authorization: Bearer APIKEY"
-```
-
-
-**Success response** 
-```
-{"success":true,"keys":[{"success":false,"workflow_id":"99951014-f0b1-473d-a474-4dc9afecaa75","execution_id":"f0b2b4e9-90ca-4835-bdd4-2889ef5f926f","org_id":"2e7b6a08-b63b-4fc2-bd70-718091509db1","key":"hi","value":"1234"}]}
-```
-
-### Delete a key
-Deletes a key, completely removing all references to it. 
-
-To delete a key from a specific category, add `"category": "name"` to the JSON body.
-
-Methods: DELETE
-
-```
-curl https://shuffler.io/api/v1/orgs/{org_id}/delete_cache  -H "Authorization: Bearer APIKEY" -d '{"org_id": "ORG_ID", "key": "hi"}'
-```
-
-
-**Success response** 
-```
-{"success": true}
 ```
 
 ## File API
@@ -656,13 +822,13 @@ Creating a file is necessary before uploading one. This is to prepare the file l
 
 Methods: POST 
 
-```
+```bash
 curl https://shuffler.io/api/v1/files/create -H "Authorization: Bearer APIKEY" -d '{"filename": "file.txt", "org_id": "your_organization", "workflow_id": "workflow_id", "namespace": "category", "labels": ["label1", "label2"]}'
 ```
 
 
 **Success response** 
-```
+```json
 {"success": true, "id": "e19cffe4-e2da-47e9-809e-904f5cb03687"}
 ```
 
@@ -671,13 +837,13 @@ Uploads a file to an ID created with the "Create a file" API function. This is o
 
 Methods: POST 
 
-```
+```bash
 curl https://shuffler.io/api/v1/files/{file}/upload -H "Authorization: Bearer APIKEY" -F 'shuffle_file=@./your_file/file_path/with_a_file.txt'
 ```
 
 
 **Success response** 
-```
+```json
 {"success": true, "id": "e19cffe4-e2da-47e9-809e-904f5cb03687"}
 ```
 
@@ -686,7 +852,7 @@ Gets the meta for all files (up to 1000)
 
 Methods: GET 
 
-```
+```bash
 curl https://shuffler.io/api/v1/files -H "Authorization: Bearer APIKEY" 
 ```
 
@@ -701,7 +867,7 @@ Gets the file CONTENT of a file
 
 Methods: GET 
 
-```
+```bash
 curl https://shuffler.io/api/v1/files/{id}/content -H "Authorization: Bearer APIKEY" 
 ```
 
@@ -716,7 +882,7 @@ Gets metadata for a file, as well as some security relevant info like MD5 and Sh
 
 Methods: POST 
 
-```
+```bash
 curl https://shuffler.io/api/v1/files/{id} -H "Authorization: Bearer APIKEY" 
 ```
 
@@ -729,15 +895,17 @@ curl https://shuffler.io/api/v1/files/{id} -H "Authorization: Bearer APIKEY"
 ### Delete a file
 Deletes a file. The file meta is left intact, but the file itself is removed from existence. Status is changed to "deleted".
 
+**PS: To REMOVE the data entirely, add `?remove_metadata=true` to the url** 
+
 Methods: DELETE
 
-```
+```bash
 curl -XDELETE https://shuffler.io/api/v1/files/{id} -H "Authorization: Bearer APIKEY" 
 ```
 
 
 **Success response** 
-```
+```json
 {"success": true}
 ```
 
@@ -746,13 +914,13 @@ Edit an active file with existing content (/upload) for first uploads. The file 
 
 Methods: PUT
 
-```
+```bash
 curl -XPUT https://shuffler.io/api/v1/files/{id}/edit -H "Authorization: Bearer APIKEY" -d 'this is the new content of the file'
 ```
 
 
 **Success response** 
-```
+```json
 {"success": true}
 ```
 
@@ -761,12 +929,12 @@ Gets all files in a namespace zipped. The point of this function is to be able t
 
 Methods: GET
 
-```
+```bash
 curl https://shuffler.io/api/v1/files/namespaces/{category} -H "Authorization: Bearer APIKEY"
 ```
 
 **?id=true**
-```
+```json
 {"success": True, "list": [{
 	"name": "Filename",
 	"id": "file_uuid",
@@ -791,22 +959,22 @@ Get all schedules
 
 Methods: GET 
 
-```
+```bash
 curl https://shuffler.io/api/v1/workflows/schedules -H "Authorization: Bearer APIKEY" 
 ```
 
 
 **Success response** 
-```
+```json
 [{"id":"cabaaffc-db53-4e19-ad8b-4f5fc0dc49c9","start_node":"","seconds":0,"workflow_id":"7b8ffd74-5e67-4700-bf79-751d1ac7e5e4","argument":"{\"start\":\"\",\"execution_source\":\"schedule\",\"execution_argument\":\"{\\\"example\\\": {\\\"json\\\": \\\"is cool\\\"}}\"}","wrapped_argument":"{\"start\":\"\",\"execution_source\":\"schedule\",\"execution_argument\":\"{\\\"example\\\": {\\\"json\\\": \\\"is cool\\\"}}\"}","appinfo":{"sourceapp":{"foldername":"","name":"","id":"","description":"","action":""},"destinationapp":{"foldername":"","name":"","id":"","description":"","action":""}},"finished":false,"base_app_location":"","org":"37217426-f794-429c-a0f9-548f7055af45","createdby":"","availability":"","creationtime":1641573762,"lastmodificationtime":1641573762,"lastruntime":1641573762,"frequency":"*/15 * * * *","environment":""}]
 ```
 
 ### Schedule a workflow
-Schedule a workflow to run at certain intervals. The node in the workflow must exist, and that the **execution argument MUST be a string**.
+Schedule a workflow to run at certain intervals. The node in the workflow must exist, and that the **execution argument MUST be a string**. May not update the ID within a workflow.
 
 Methods: POST 
 
-```
+```bash
 curl -XPOST https://shuffler.io/api/v1/workflows/{workflow_id}/schedule -H "Authorization: Bearer APIKEY" -d '{
 	"name":"Schedule",
 	"frequency":"*/25 * * * *",
@@ -818,7 +986,7 @@ curl -XPOST https://shuffler.io/api/v1/workflows/{workflow_id}/schedule -H "Auth
 
 
 **Success response** 
-```
+```json
 {"success":true}
 ```
 
@@ -827,13 +995,13 @@ Stop a schedule from running
 
 Methods: DELETE 
 
-```
+```bash
 curl -XDELETE https://shuffler.io/api/v1/workflows/{workflow_id}/schedule/{schedule_id} -H "Authorization: Bearer APIKEY" 
 ```
 
 
 **Success response** 
-```
+```json
 {"success":true}
 ```
 
@@ -842,7 +1010,7 @@ Start a new webhook
 
 Methods: POST 
 
-```
+```bash
 curl -XPOST https://shuffler.io/api/v1/hooks -H "Authorization: Bearer APIKEY" -d '{"name":"Webhook_1","type":"webhook","id":"db434f8c-a9cb-47ec-abf8-ad8fb10e5809","workflow":"7b8ffd74-5e67-4700-bf79-751d1ac7e5e4","start":"6601f07f-92f2-45d3-88bf-328db7bfdfa0","environment":"cloud","auth":""}'
 ```
 
@@ -852,7 +1020,7 @@ curl -XPOST https://shuffler.io/api/v1/hooks -H "Authorization: Bearer APIKEY" -
 
 
 **Success response** 
-```
+```json
 {"success":true}
 ```
 
@@ -861,13 +1029,13 @@ Stop a running webhook from being available
 
 Methods: DELETE 
 
-```
+```bash
 curl -XDELETE https://shuffler.io/api/v1/hooks/{webhook_id} -H "Authorization: Bearer APIKEY" 
 ```
 
 
 **Success response** 
-```
+```json
 {"success":true, "reason": "Stopped webhook"}
 ```
 
@@ -880,29 +1048,41 @@ Notifications can be manually created, and will show up on the /admin?tab=priori
 
 Methods: POST 
 
-```
-curl -XPOST https://shuffler.io/api/v1/notifications -H "Authorization: Bearer APIKEY" -d '{"org_id": "YOUR ORGID", "title": "The title", "description": "The description of the notification", "reference_url": "URL for where to go when the user clicks explore"}'
+```bash
+curl -XPOST https://shuffler.io/api/v1/notifications -H "Authorization: Bearer APIKEY" -d '{
+	"org_id": "YOUR ORGID",
+	"title": "The title",
+	"description": "The description of the notification",
+	"reference_url": "URL for where to go when the user clicks explore"
+}'
 ```
 
 
 **Success response** 
-```
+```json
 {"success":true}
 ```
 
 
 ### Get all notifications
-Get all notifications assigned to your user from your organizations 
+Get all notifications assigned to your user from your organizations. 
 
 Methods: GET 
 
-```
-curl https://shuffler.io/api/v1/notifications -H "Authorization: Bearer APIKEY" 
+Available queries:
+- status: open => only returns open
+- type: agent_question => only returns notifications of type 'agent_question' 
+- severity: MEDIUM => only returns "MEDIUM" severity
+
+Queries can be mixed for better filtering.
+
+```bash
+curl https://shuffler.io/api/v1/notifications?status=open -H "Authorization: Bearer APIKEY" 
 ```
 
 
 **Success response** 
-```
+```json
 {"success":true,"notifications":[{"image":"","created_at":1638898114,"updated_at":1638898114,"title":"Error in Workflow \"Shuffle Workflow helloooo\"","description":"Node shuffle_tools_1 in Workflow Shuffle Workflow Winner announcement was found to have an error. Click to investigate","org_id":"","user_id":"","tags":null,"amount":1,"id":"057bf2b5-d29d-4bb4-bf2f-d8a6ee882dfe","reference_url":"/workflows/1693bf4a-b0f4-46dd-8257-448cbc6b0e9b?execution_id=74adf061-f949-4392-9e2d-1fd5e3381037\u0026view=executions\u0026node=ef683a39-4c2b-4c83-ad2d-d28a922e44b4","org_notification_id":"60a22356-1028-4226-b755-51804e3a25a2","dismissable":true,"personal":true,"read":false}]}
 ```
 
@@ -911,13 +1091,13 @@ Clears all notifications
 
 Methods: GET 
 
-```
+```bash
 curl https://shuffler.io/api/v1/notifications/clear -H "Authorization: Bearer APIKEY" 
 ```
 
 
 **Success response** 
-```
+```json
 {"success":true}
 ```
 
@@ -926,14 +1106,55 @@ Marks a single notification as read
 
 Methods: GET 
 
-```
+```bash
 curl https://shuffler.io/api/v1/notifications/{notificationId}/markasread -H "Authorization: Bearer APIKEY" 
 ```
 
 
 **Success response** 
-```
+```json
 {"success":true}
+```
+
+## Environments
+Below are the endpoints related to **Runtime Locations** (previously environments)
+
+### Get environments
+Get user's active Organization's environments.
+
+Methods: GET 
+
+```bash
+curl https://shuffler.io/api/v1/getenvironments -H "Authorization: Bearer APIKEY" 
+```
+
+Ps: If you want to get the environments of another org, Please add in the Org-Id: {Org-Id} header.
+
+It would return something like this:
+```bash
+[{
+    "Name": "example",
+    "Type": "onprem",
+    "Registered": false,
+    "default": false,
+    "archived": true,
+    "id": "{ID}",
+    "org_id": "{ID}",
+    "created": 1710253304,
+    "edited": 1750766926,
+    "checkin": 1716270170,
+    "running_ip": "",
+    "auth": "{AUTH}",
+    "queue": 1,
+    "orborus_uuid": "",
+    "licensed": false,
+    "run_type": "docker",
+    "data_lake": {
+        "enabled": false,
+        "pipelines": null
+    },
+    "suborg_distribution": null
+}]
 ```
 
 ## Organizations
@@ -944,52 +1165,153 @@ Get an Organization by its ID
 
 Methods: GET 
 
-```
+```bash
 curl https://shuffler.io/api/v1/orgs/{org_id} -H "Authorization: Bearer APIKEY" 
 ```
 
 
 **Success response** 
-```
-{"name":"Testing","description":"Description","company_type":"","image": "base64 image", "id":"583816e5-40ab-4212-8c7a-e54c8edd6b51","org":"new suborg","users":[],"role":"","roles":["admin","user"],"active_apps":["eb6b633ebbb77575ad17789eecf36cdf"],"cloud_sync":false,"cloud_sync_active":true,"sync_config":{"interval":0,"api_key":"","source":""},"sync_features": {}, "invites":null,"child_orgs":[],"manager_orgs":null,"creator_org":"PARENT_ORG_ID","disabled":false,"partner_info":{"reseller":false,"reseller_level":""},"sso_config":{"sso_entrypoint":"","sso_certificate":"","client_id":"","client_secret":"","openid_authorization":"","openid_token":""},"main_priority":"","region":"","region_url":"","tutorials":[]} 
+```json
+{"name":"Testing","description":"Description","company_type":"","image": "base64 image", "id":"583816e5-40ab-4212-8c7a-e54c8edd6b51","org":"new suborg","users":[],"role":"","roles":["admin","user"],"active_apps":["eb6b633ebbb77575ad17789eecf36cdf"],"cloud_sync":false,"cloud_sync_active":true,"sync_config":{"interval":0,"api_key":"","source":""},"sync_features": {}, "invites":null,"child_orgs":[],"manager_orgs":null,"creator_org":"PARENT_ORG_ID","disabled":false,"partner_info":{"reseller":false,"reseller_level":""},"sso_config":{"sso_entrypoint":"","sso_certificate":"","client_id":"","client_secret":"","openid_authorization":"","openid_token":""},"main_priority":"","region":"","region_url":"","tutorials":[], "org_auth": {"org_token": "", "expires": ""}} 
 ```
 
 ### Create a Suborg
 Creates an organization that will be the child of your current organization. Can not be done from a existing Child org. Required fields: org_id and name. OrgId needs to match your CURRENT organization.
 
 Methods: POST 
-```
+
+```bash
 curl -XPOST https://shuffler.io/api/v1/orgs/{org_id}/create_sub_org -H "Authorization: Bearer APIKEY" -d '{"org_id": "org_id", "name": "Child Org Name"}'
 ```
 
 **Success response** 
-```
-{"success": true, "reason": "Successfully created new sub-org"}
+```json
+{"success": true, "id": "<new org uuid>", "reason": "Successfully created new sub-org"}
 ```
 
 ### Change current Organization
 Shuffle is based on your CURRENT organization. This means you have to swap between your Organizations to get the the relevant information. If you want access to force the usage of another organization than your currently active one, use "Org-Id=<org_id>" as a Header. This is a further outlined in the Authentication section.
 
 Methods: POST 
-```
+
+```bash
 curl -XPOST https://shuffler.io/api/v1/orgs/{CURRENT_ORG_ID}/change -H "Authorization: Bearer APIKEY" -d '{"org_id": "ORG TO CHANGE TO"}'
 ```
 
 **Success response** 
-```
+```json
 {"success": true, "reason": "Changed Organization", "region_url": "New API endpoint IF applicable"}
 ```
+
+### Generate SSO login link
+Generate an SSO provision URL for user provisioning in partner organizations (For now. Please contact support@shuffler.io if you would like to use this API). This endpoint allows admin users in partner organizations to provision new users or generate login URLs for existing users.
+
+**Requirements:**
+- Admin role required in the target organization (or its parent organization for child orgs)
+- Organization (or its parent) must be a partner (DistributionPartner, IntegrationPartner, ServicePartner, TechPartner, or ChannelPartner)
+- Auto provision must be enabled
+- SSO must be configured (OpenIdClientId and OpenIdToken required)
+
+Methods: POST
+
+```bash
+curl -XPOST https://shuffler.io/api/v1/orgs/sso/link \
+  -H "Authorization: Bearer APIKEY" \
+  -H "Org-Id: target_org_id" \
+  -d '{
+    "email": "user@example.com"
+  }'
+```
+
+**Headers:**
+- `Authorization: Bearer APIKEY` (required) - Your API key for authentication
+- `Org-Id: target_org_id` (optional) - Specify the organization to provision in. If not provided, uses your current active organization.
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Success response for new user:**
+```json
+{
+  "success": true,
+  "sso_url": "https://auth.example.com/sso?state=...",
+  "user_id": "uuid-of-created-user"
+}
+```
+
+**Success response for existing user:**
+```json
+{
+  "success": true,
+  "sso_url": "https://auth.example.com/sso?state=...",
+  "existing_user": true,
+  "sso_configured": true
+}
+```
+
+**Error responses:**
+
+Authentication required:
+```json
+{"success": false, "reason": "Authentication required"}
+```
+
+Admin access required:
+```json
+{"success": false, "reason": "Admin access required in the relevant org"}
+```
+
+Not a partner organization:
+```json
+{"success": false, "reason": "Provisioning not allowed. We need a partner org for this."}
+```
+
+Auto provision disabled:
+```json
+{"success": false, "reason": "Provisioning not allowed. Auto provision is disabled."}
+```
+
+SSO not configured:
+```json
+{"success": false, "reason": "SSO not configured for this organization"}
+```
+
+Invalid email:
+```json
+{"success": false, "reason": "Invalid email address"}
+```
+
+Restricted email domain:
+```json
+{"success": false, "reason": "Cannot provision @shuffler.io email addresses"}
+```
+
+User already exists (not provisioned by this org):
+```json
+{"success": false, "reason": "User already exists"}
+```
+
+**What happens:**
+1. **For new users**: Creates a new user account, adds them to the organization, and returns an SSO setup URL
+2. **For existing users provisioned by this org**: 
+   - If SSO is already configured: Returns a login URL
+   - If SSO is not configured: Returns a setup URL to complete SSO configuration
 
 ### Edit Organization
 Edit an Organization. Each field is individually managed, except org_id which is required.
 
 Methods: POST 
-```
+
+```bash
 curl -XPOST https://shuffler.io/api/v1/orgs/{org_id} -H "Authorization: Bearer APIKEY" -d '{"org_id": "current org id", "name": "New Organization Name", "image": "Base64 image", "description": "New Description"}'
 ```
 
 **Success response** 
-```
+```json
 {"success": true, "reason": "Changed Organization", "region_url": "New API endpoint IF applicable"}
 ```
 
@@ -998,7 +1320,7 @@ Lists the available organizations to your account
 
 Methods: GET 
 
-```
+```bash
 curl https://shuffler.io/api/v1/orgs -H "Authorization: Bearer APIKEY" 
 ```
 
@@ -1007,25 +1329,109 @@ curl https://shuffler.io/api/v1/orgs -H "Authorization: Bearer APIKEY"
 [{"name":"Testing","description":"Description","company_type":"","image": "base64 image", "id":"583816e5-40ab-4212-8c7a-e54c8edd6b51","org":"new suborg","users":[],"role":"","roles":["admin","user"],"active_apps":["eb6b633ebbb77575ad17789eecf36cdf"],"cloud_sync":false,"cloud_sync_active":true,"sync_config":{"interval":0,"api_key":"","source":""},"sync_features": {}, "invites":null,"child_orgs":[],"manager_orgs":null,"creator_org":"PARENT_ORG_ID","disabled":false,"partner_info":{"reseller":false,"reseller_level":""},"sso_config":{"sso_entrypoint":"","sso_certificate":"","client_id":"","client_secret":"","openid_authorization":"","openid_token":""},"main_priority":"","region":"","region_url":"","tutorials":[]}]
 ```
 
-### Delete Organizations
-Deletes an organization. Only possible for sub-organizations. 
+### List Child Organizations
+Lists the child organizations of a parent organization
 
-**This requires you to have already removed all workflows, and will NOT clean up all the data in the database until it expires (3 months~)**
+Methods: GET 
 
-Methods: DELETE 
-
-```
-curl -XDELETE https://shuffler.io/api/v1/orgs/{org_id} -H "Authorization: Bearer APIKEY" 
+```bash
+curl https://shuffler.io/api/v1/orgs/{parentOrgId}/suborgs?cursor=<cursor> -H "Authorization: Bearer APIKEY" 
 ```
 
 **Success response** 
 ```
+{"cursor": "cursor", "parentOrg": {"name": "Parentorg_name", "id": "parentorg_id"}, "subOrgs": [{"name":"Testing","description":"Description","company_type":"","image": "base64 image", "id":"583816e5-40ab-4212-8c7a-e54c8edd6b51","org":"new suborg","users":[],"role":"","roles":["admin","user"],"active_apps":["eb6b633ebbb77575ad17789eecf36cdf"],"cloud_sync":false,"cloud_sync_active":true,"sync_config":{"interval":0,"api_key":"","source":""},"sync_features": {}, "invites":null,"child_orgs":[],"manager_orgs":null,"creator_org":"PARENT_ORG_ID","disabled":false,"partner_info":{"reseller":false,"reseller_level":""},"sso_config":{"sso_entrypoint":"","sso_certificate":"","client_id":"","client_secret":"","openid_authorization":"","openid_token":""},"main_priority":"","region":"","region_url":"","tutorials":[]}]}
+```
+
+### Delete Organizations
+Deletes an organization. Only possible for sub-organizations. 
+
+**This requires you to have already removed all workflows, and will NOT clean up all the data in the database until it expires (3 months~)**
+**Only **admins of the parent organization** can delete a sub-organization.**
+
+Methods: DELETE 
+
+```bash
+curl -XDELETE https://shuffler.io/api/v1/orgs/{org_id} -H "Authorization: Bearer APIKEY" 
+```
+
+**Success response** 
+```json
 {"success": true}
 ```
 
+### Invite user to organization
+Invites a user to join your organization. If the user doesn't exist, they will be created with a temporary password and invited via email. Only organization admins can invite users.
 
-## Integration Layer
-The Integration Layer of Shuffle is a way to interact with apps a new way. It utilizes Apps that are Categorized and Labeled, and gives access to API's for specific actions for each of those labels. Behind the scenes there is always a workflow for each of these, and Shuffle wants to give granular control of each individual Workflow if wanted. The integration layer is based on [Shuffle's Schemaless translation technology](https://github.com/frikky/schemaless), built on top of LLMs, with the goal of making Shuffle be able to act as a Large **Action** Model (LAM).
+Methods: POST
+
+```bash
+curl -XPOST https://shuffler.io/api/v1/register_org -H "Authorization: Bearer APIKEY" -d '{
+  "username": "user@example.com"
+}'
+```
+
+Alternative endpoint:
+```bash
+curl -XPOST https://shuffler.io/api/v1/users/register_org -H "Authorization: Bearer APIKEY" -d '{
+  "username": "user@example.com"
+}'
+```
+
+**Requirements:**
+- You must be an admin of the organization to invite users
+- The username must be a valid email address
+
+**What happens:**
+1. If the user doesn't exist in Shuffle:
+   - A new user account is created
+   - An invitation email is sent to the user with a link to join the organization
+
+2. If the user already exists in Shuffle but not in your org:
+   - The organization is added to the user's list of organizations
+   - An invitation email is sent to the user with a link to join the organization
+
+3. If the user already exists in your organization:
+   - The user is already a member - no action is taken
+
+**Success response**
+```json
+{"success": true}
+```
+
+**Error responses**
+
+Admin permission required:
+```json
+{"success": false, "reason": "You don't have access to invite users to this organization"}
+```
+
+User already exists in organization:
+```json
+{"success": false, "reason": "User already exist in this organization"}
+```
+
+Invalid email:
+```json
+{"success": false, "reason": "Email is invalid"}
+```
+
+**Important notes:**
+- The invite link format is: `https://shuffler.io/invite?invite_id={userId}_{inviteId}&org_id={orgId}`
+- If the organization has SSO enabled, `&sso=enabled` is added to the invite link
+- For new users, the region is automatically set to the organization's region.
+
+## Detection API
+Below are the endpoints related to manage detections in the Shuffle platform. The Detection APIs are based on the [File API in Shuffle](#file-api), but has some custom management interfaces to make it easier to use. The primary area this is currently used heavily is in [Shuffle Security](https://security.shuffler.io/detection).
+
+The detection system is both used for internal Detection, as well as for distributed third party detection management in multiple environments simultaneously.
+
+If you want to know more about these endpoints, reach out to [support@shuffler.io](mailto:support@shuffler.io). 
+
+## Singul
+The Integration Layer of Shuffle, [also named Singul](https://singul.io), is a way to interact with apps a new way. It utilizes Apps and MCPs that are auto-generated, auto-Categorized and auto-Labeled, and gives access to API's for specific actions for each of those labels. The integration layer is based on [Shuffle's Schemaless translation technology](https://github.com/frikky/schemaless), with the goal of making Shuffle able to act as a Large **Action** Model (LAM).
+
+[A frontend library is also available to handle integrations in your own platform. Learn more here.](https://security.shuffler.io/shuffle-mcp-demo)
 
 <img width="713" alt="image" src="https://github.com/Shuffle/Shuffle-docs/assets/5719530/e806707d-9635-465b-8040-b3e26b1786a0">
 
@@ -1105,6 +1511,27 @@ curl https://shuffler.io/api/v1/apps/categories -H "Authorization: Bearer APIKEY
 ```
 
 
+### How to debug Singul executions
+- Go to https://shuffler.io/workflows/debug
+- You should see something like this:
 
 
+<img src="https://github.com/frikky/shuffle-docs/blob/master/assets/singul-debugger.png?raw=true"> 
 
+
+As you can see, I triggered this Singul execution through the Singul app (not the SDK). However, even if you were using the SDK, you would find such executions.
+
+- Click on the icon below "Explore":
+
+<img src="https://github.com/frikky/shuffle-docs/blob/master/assets/explore-singul.png?raw=true">
+
+- You will see the full result of the execution. Click on the arrow
+
+<img src="https://github.com/frikky/shuffle-docs/blob/master/assets/singul-debugging-step1.png?raw=true">
+
+- To see the body that Singul translated to, scroll and find the "Body" 
+
+<img src="https://github.com/frikky/shuffle-docs/blob/master/assets/singul-debugging-step2.png?raw=true">
+
+
+Based on the output, and the input mentioned in "Body", you should be able to figure out what is going on here.

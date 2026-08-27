@@ -1,0 +1,256 @@
+# AI at Shuffle
+With AI becoming a larger part of the Automation space, the goal with AI at Shuffle is provide it in a deterministic, controllable and responsible way. The main use is for Workflow building, [Shuffle Security](https://security.shuffler.io) and [MCP connectivity](/docs/API#MCP) with third party platforms.
+
+## Using LLMs 
+Shuffle by default provides LLM credits. This is available to a certain level to those who use our Cloud or Hybrid offerings, and works infinitely with [self-hosted models](#how-to-set-up-a-self-hosted-ai-model-with-shuffle).
+
+Since Shuffle's Agentic system is built by the Shuffle team from scratch, it means that it all runs locally where you want it with no third party requirements. 
+
+## AI Agents
+Agents are a way to have an AI model interact with the world. In Shuffle, this means using tools (playbooks) to perform actions. We intend to provide controllable, deterministic Agents that can be used to perform tasks.
+
+**Some areas has been built for:**
+- Tool Usage  (MCP: Detection, Collection, Enrichment & Response)
+- Reasoning   (E.g. for workflow building and other heavy tasks)
+- Correlation (Historical alerts and cases)
+
+### MCP
+MCPs (Model Context Protocol) are the concept of having an AI Agent decide what actions to perform within a specific pool of available actions. It is typically used by agents as to have them be specialised, but there is nothing stopping them from being used directly as well.
+
+[In Shuffle, **EVERY SINGLE APP** is an MCP](/docs/API#MCP). This is available with the  `POST /api/v1/mcp` API and is based on the [MCP standard](https://modelcontextprotocol.io/docs/getting-started/intro). You may even point to multiple apps at once.
+
+The easiest way to try one in Shuffle is by going to [/agents](/agents), choosing an app (or more), and telling it what to use it for. This makes the agent act as an MCP. 
+
+<img width="840" height="397" alt="image" src="https://github.com/user-attachments/assets/e0b2894f-2b4d-4d0c-a8ce-63561f780e97" />
+
+They are also available for all apps in [Shuffle Security](https://security.shuffler.io/apps/outlook_office365). 
+
+<img width="778" height="269" alt="image" src="https://github.com/user-attachments/assets/f9eed81b-4251-41b6-b3c6-c2a12c29d7e6" />
+
+If you want to make your own API or Python script into an MCP, [make an app](/apps)! That is all it takes.
+
+<img width="840" height="581" alt="image" src="https://github.com/user-attachments/assets/083032e8-131b-42e1-b945-df9001bd02bc" />
+
+### Question handling
+Questions are a way for the agent to fill in knowledge-gaps. In these cases, it asks questions automatically.
+
+<img width="1463" height="762" alt="image" src="https://github.com/user-attachments/assets/f11cdf1f-75be-4829-b863-7c58ff396e1d" />
+
+**PS:** Questions do NOT reach out to you as a realtime Notification **yet**, which is the future intention.
+
+### Action Approvals
+For sensitive actions, the agent is required to set the field "approval_required": true. This is a mechanism that stops the decision from automatically running, and instead waits for user input. 
+
+If you want to see it in action, try `get my emails. Set approval_required: true for all API requests`
+
+<img width="1443" height="146" alt="image" src="https://github.com/user-attachments/assets/efaa9964-24da-4b96-bf08-1a2779a7f7b2" />
+
+This is currently 100% dynamically controlled by the agent directly, along with responding to pre-defined actions that should not run automatically.
+
+**PS:** Action Approvals do NOT reach out to you as a realtime Notification **yet**, which is the future intention.
+
+### Agent Continuations
+Continuations are a way of changing or continuing the behavior of a previous AI Agent run. This makes it possible to "talk" to the agent after it is done with a task.
+
+The field will automatically show up at the bottom, below the final output of the Agent run. 
+
+<img width="1273" height="563" alt="image" src="https://github.com/user-attachments/assets/e09e937e-e9df-4a52-9d98-624b18e35d61" />
+
+### Finding AI Agent runs
+As with all platform-wide debugging in Shuffle, AI Agent runs are available in the [/workflows/debug](/workflows/debug) UI. By selecting "Agent Runs" at the top of the Workflow list, you will be given an overview of everything the agentic system has and will do in your environment.
+
+<img width="1211" height="556" alt="image" src="https://github.com/user-attachments/assets/fd5aec29-3052-4e94-ade5-7199faa96342" />
+
+## Using agents in Workflows
+To use agents in Workflows, make a new workflow, then pull in "AI Agent" from the left side. 
+
+TBD: More details coming soon.
+
+<img width="1018" height="227" alt="image" src="https://github.com/user-attachments/assets/de6fddbc-a9d1-4456-85d9-2b3ac4aee8ba" />
+
+### Workflow building
+TBA: Coming soon. The goal is to take actions from a previous AI agent run and make well-tested and well-configured workflows out of them, as to keep determinism.
+
+## Singul
+Singul works against vendor-locking with our translator for different providers of the same tools, such as Slack vs Teams vs Discord (communication), or Splunk vs Elastic vs QRadar (SIEM). It uses LLMs to understand the context of what you are trying to perform, and makes a determinsitic translation to use a standard such as OCSF or STIX. This is a powerful way to avoid vendor lock-in, and to make your automation more future-proof. 
+
+A good example of this being used actively is [Shuffle Security](https://security.shuffler.io), where we ingest tickets and handle enrichment in a standardised format.
+
+Read the [usage Shuffle Docs here](https://github.com/Shuffle/openapi-apps/blob/master/docs/singul.md)
+Website: [https://singul.io](https://singul.io)
+
+## App generation
+App generation is a system built to generate Rest API apps from documentation URLs. It works by emulating a browser with which it crawls the documentation.
+
+<img width="1281" height="425" alt="image" src="https://github.com/user-attachments/assets/002f9079-b4fa-4c3f-8cf9-54ad29a65c07" />
+
+### 1. Navigate to the App page
+Go to [/apps](/apps)
+
+### 2. Click "Create an App"
+
+### 3. Click "Generate from Documentation"
+
+<img width="601" height="417" alt="image" src="https://github.com/user-attachments/assets/f82fa8d1-61f7-4165-bf00-b10deb4e773c" />
+
+### 4. Paste a URL and hit "Generate". This may take up to a few minutes.
+
+Sample URL: https://docs.virustotal.com/reference/ip-info
+
+<img width="617" height="371" alt="image" src="https://github.com/user-attachments/assets/1ecf31a9-c85c-439d-b6b3-1dbb5d721afe" />
+
+### 5. You get a valid App that can be used in seconds!
+
+<img width="621" height="579" alt="image" src="https://github.com/user-attachments/assets/a0fac4a2-a5b3-433a-808d-0615f5e29bb5" />
+
+### 6. Save it, then start using it in workflows. 
+
+## Workflow generation
+This guide will walk you through creating a complete, functional Shuffle workflow in seconds, just by describing what you want to do in plain English.
+
+### 1: Navigate to the Workflow Page
+* In the navigation sidebar on the left, click on "Workflows". This will take you to the `/workflows` page where you'll see your list of existing workflows.
+
+### 2: Click "Create Workflow"
+* In the top right corner of the Workflows page, click the "Create Workflow" button.
+
+<img width="1200" height="966" alt="create_workflow" src="https://github.com/user-attachments/assets/8938b032-db6f-4f25-b8bb-578f241c638c" />
+
+### 3: Describe Your Goal
+
+****You have two options: writing a description or uploading a flowchart.****
+
+
+***Option A: Write a Text Description***
+
+<img width="600" height="650" alt="AI_generate_page" src="https://github.com/user-attachments/assets/c756caf1-a32b-4b56-bd5a-81fc2ec879dd" />
+
+
+* At the top of the canvas, you will see a text box that says "Describe your workflow in natural language...". This is where the magic happens.
+* Click inside this box and type out the process you want to automate.
+
+**Tips for a Great Description:**
+* **Be Specific:** Instead of "Check a URL," try "Check a URL in VirusTotal."
+* **Name Your Tools:** Mention the specific apps you want to use (e.g., "Open a ticket in Jira," "Send a message to Slack").
+
+**Example Description:**
+  When a phishing email is reported, get the URL from the email body. Check the URL's reputation in VirusTotal. If the score is above 5, create a new ticket in      TheHive and send a high-priority alert to the 'security-alerts' channel in Slack.
+
+***Option B: Upload a Flowchart Image***
+
+If you prefer to visualize your process, you can upload an image of a flowchart. The AI will analyze the shapes, text, and connections in the diagram to build your workflow.
+
+<img width="600" height="650" alt="flowchart" src="https://github.com/user-attachments/assets/a484e0ed-3f21-4a3c-a8f3-dbd333a893e4" />
+
+* Look for the large box below the "Description" field that says "Generate Workflow from Flowchart" with a cloud upload icon.
+
+* Click anywhere inside this box. This will open your computer's file browser.
+
+* Select a flowchart image (e.g., a .png, .jpg, or .jpeg file up to 5MB in size) from your computer.
+
+**Pro Tip:** Add a Description for Even Better Results
+Even after uploading your flowchart, we recommend adding a brief text description in the "Description" box (mentioned in Option A).
+
+Think of this description as extra instructions for the AI model. It helps clarify any details or ambiguities in the flowchart and provides specific context, leading to an even more accurate and powerful workflow.
+
+**Example description to add:**
+
+This flowchart shows our phishing response process. The goal is to automate the URL check with VirusTotal and create a Jira ticket for malicious findings.
+
+**Important Note for Self-Hosted Users:**
+The ability to process images depends entirely on your AI model. This feature is fully supported when using Shuffle Cloud's default model. If you are using a self-hosted model (like Ollama), you must ensure it is a multimodal model (one that can understand both text and images) for this feature to work correctly.
+
+
+### 4: Generate the Workflow
+
+* Once you are satisfied with your description or uploaded flowchart, click the 'AI Generate' button.
+* Wait a few moments. The AI will analyze your request and automatically build the workflow on the canvas, complete with the right apps and connections.
+
+### 5: Review and Customize
+* The AI-generated workflow is a powerful starting point. You can now:
+
+* Click on each app to configure its specific settings (e.g., authenticating with your Jira account).
+
+* Drag and drop new apps onto the canvas.
+
+* Modify the connections between the apps.
+
+**Congratulations! You've just built an automation workflow using AI.**
+
+## Editing a Workflow
+This is a work in progress. Currently in Alpha. Contact support@shuffler.io if you would like to be a tester.
+
+## Using self-hosted AI models
+
+While Shuffle's Cloud platform provides AI credits to get you started, connecting your own self-hosted AI model gives you ultimate control and flexibility. This guide will walk you through the process.
+
+**Before you configure Shuffle, please ensure you have the following ready:**
+
+1. A Server to Run the AI: You need a computer that Shuffle can reach over the network. This can be a VM, physical server or a cloud instance.
+2. We recommend Ollama as the simplest way to run local AI models. Go to [Download Ollama](https://ollama.com/download) to install it on your server. After installation, make sure the Ollama service is running.
+3. Once Ollama is installed, you need a model for it to serve. For a great starting point, we recommend the gpt-oss model. It's a powerful and versatile model perfect for general tasks. (You can read more about it in Ollama's official announcement [here](https://ollama.com/blog/gpt-oss)). Of course, you can use any model available on Ollama. Our gpt-oss suggestion is just a recommendation to make getting started easy.
+
+
+Open your server's terminal and run this command:
+
+```bash
+ollama run gpt-oss:20b
+```
+
+### Setting Up Environment Variables in Shuffle
+
+Once your self-hosted AI model is running, you can proceed with setting up the necessary environment variables in Shuffle.
+
+**Step 1: Find Your AI Server Details**
+
+You will need the following information from your self-hosted AI server:
+
+* The full URL of the API (e.g., http://192.168.1.55:11434/v1).
+* The exact name of the model you want to use (e.g., llama3).
+* An API key (if your server requires authentication).
+
+**Step 2: Set the Environment Variables**
+
+`AI_API_URL` (Required)
+
+* What it is: The full URL to your AI server's API endpoint.
+
+Example: 
+```bash
+AI_API_URL=http://localhost:11434/v1
+```
+
+`AI_MODEL` (Required)
+
+* What it is: The exact name of the model you want Shuffle to use.
+
+Example:
+```bash
+AI_MODEL=llama3
+```
+
+AI_API_KEY (Optional)
+
+* What it is: The API key or token if your server requires authentication.
+
+Example:
+```bash
+AI_API_KEY=sk-mysecretkey123
+```
+
+Shuffle can support any self-hosted model that implements the OpenAI API interface. Examples include Ollama, local LLMs wrapped with OpenAI-compatible endpoints, or any other model that exposes the same API.
+
+Once these are set, there is no need to restart your Shuffle backend server as the checks happen in real-time. The AI features will be automatically enabled, allowing you to use them immediately.
+
+**Note: You need to refresh the Shuffle UI page in your browser for the new AI features to appear.**
+
+## AI for quicker Support
+TBA: Coming soon. The goal is to provide quick answers to typical questions, and otherwise forward to the Shuffle team.
+
+## Troubleshooting
+
+* Ensure your AI server is running and reachable at the URL you provided.
+* If using authentication, double-check the API key.
+* Use the exact model name available on your self-hosted AI instance.
+
+If anything else goes wrong, please contact support@shuffler.io

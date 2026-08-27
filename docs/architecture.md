@@ -27,7 +27,11 @@ Shuffle Installation models:
 ## Architecture overview
 The platform is split into two main parts: Server and Workers. The server acts as the host of everything from API activity to Workflow validation, while the Workers are another standalone unit, working in a microservice-esque way. The top and bottom part can be installed on different hosts and be clustered.
 
-![Architecture](https://github.com/frikky/shuffle-docs/blob/master/assets/shuffle_architecture.png?raw=true)
+Single Server installation:
+![Single Server installation](https://github.com/user-attachments/assets/a51b3973-9849-4b68-b1b5-a1259bb9a4c0)
+
+Simplified:
+![Simplified Architecture](https://github.com/frikky/shuffle-docs/blob/master/assets/shuffle_architecture.png?raw=true)
 
 ## Frameworks
 Shuffle uses and is built upon existing, well established frameworks to help the Security community move forward, rather than just increase complexity. 
@@ -92,7 +96,7 @@ Hashed (bcrypt):
 - User passwords.
 
 Encrypted (AES-256):
-- [App authentication](#app_authentication) and [Files](#files) are being encrypted. The seed used for hashing is random for each organization, and can be set with the environment variable SHUFFLE_ENCRYPTION_MODIFIER in the local version of Shuffle. This is automatically handled in our SaaS offering. How it works: 
+- [App authentication](/docs/organizations#app_authentication), [Protected Datastore Keys](/docs/organizations#datastore) and [Files](/docs/organizations#files) are being encrypted. The seed used for hashing is random for each organization, and can be set with the environment variable SHUFFLE_ENCRYPTION_MODIFIER in the local version of Shuffle. This is automatically handled in our SaaS offering. How it works: 
 
 	1. Create md5 hash from Org ID + Workflow_id + Auth timestamp + SHUFFLE_ENCRYPTION_MODIFIER
 	2. Encrypt the authentication value with [aes.NewCipher](https://cs.opensource.google/go/go/+/go1.17.1:src/crypto/aes/cipher.go;l=32)
@@ -109,8 +113,29 @@ Encrypted (AES-256):
 - [Decrypt](https://github.com/Shuffle/shuffle-shared/blob/d5e67ed2cefb5e94f3c516bdd3030384f6241754/shared.go#L11228)
 
 
+### Password Management
+On the cloud instance of Shuffle (https://shuffler.io) the following password policy applies:
+- Minimum length of 10
+- Lower- and Uppercase character
+  
+If you try to log in too many times in a short amount of time, you will be locked from attempting to log in for a short amount of time. [Details can be seen here: CheckPasswordStrength()](https://github.com/Shuffle/shuffle-shared/blob/c0c6ec07f7268622d9ad82b2854475bf987ded6c/shared.go#L9452)
+
+In local instances of Shuffle, password policies are minimal (8 characters).
+
+### MFA and SSO
+SAML/SSO and MFA is fully available and can be controlled from an organisation perspective. Users can be a part of multiple organisations, but if even one organisation the user is in enables "MFA Required", it will now be required for the users. 
+
+**MFA:** [https://shuffler.io/admin?tab=users](https://shuffler.io/admin?tab=users)
+
+<img width="1501" height="195" alt="image" src="https://github.com/user-attachments/assets/78df42d7-521f-42fd-8f3f-a54c4cd88630" />
+
+SAML/SSO: [https://shuffler.io/admin?admin_tab=sso](https://shuffler.io/admin?admin_tab=sso)
+
+<img width="1066" height="949" alt="image" src="https://github.com/user-attachments/assets/2726db10-ab43-4395-a604-b8c629d9cbf2" />
+
+
 ### Backend API access
-There are multiple ways to access the API. The first is through the UI and a logged in user. The second is through the API directly with a Bearer token. The third is from a workflow execution.  
+There are multiple [ways to access the API](/docs/API). The first is through the UI and a logged in user. The second is through the API directly with a Bearer token. The third is from a workflow execution.  
 
 - Session Token: Defined in a users' browser as user logs in. 
 - Bearer Auth: This is a token provided to each user to be used with the [API](/docs/API)
