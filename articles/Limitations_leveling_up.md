@@ -6,9 +6,9 @@ It's been a big few months for Shuffle, and we couldn't be more excited to share
 
 No matter how you run Shuffle, you now have access to some major upgrades:
 
-- Shuffle AI: smarter automation baked right into your workflows
-- Agents: a new way to orchestrate complex, multi-step tasks
-- A long list of bug fixes and quality-of-life improvements, many of which came directly from feedback you shared with us
+- **Shuffle AI**: smarter automation baked right into your workflows
+- **Agents**: a new way to orchestrate complex, multi-step tasks
+- A long list of **bug fixes and quality-of-life improvements**, many of which came directly from feedback you shared with us
 
 These updates reflect months of listening to the community, squashing bugs, and building the features you've been asking for. If you haven't explored Shuffle AI or Agents yet, now's a great time to dive in.
 
